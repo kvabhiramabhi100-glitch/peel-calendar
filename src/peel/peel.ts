@@ -17,13 +17,17 @@ const PEEL_RANGE_PX = 300; // pointer travel (up) for a full peel
 const TOSS_THRESHOLD = 0.55;
 const RELAX_SPEED = 9; // uPeel → 0 lerp rate when relaxing
 const GRAVITY = 5.5; // gentle arc so pages sail off before falling back
-const MAX_LIFE = 1.0; // backstop lifetime for a tossed page (usually exits sooner)
-const FADE_TAIL = 0.2; // seconds of fade at the end of MAX_LIFE (avoids a pop)
-// Toss velocity in camera-screen space: up the screen + into the screen
-// (receding) + an alternating sideways fan so pages clear the centre.
-const TOSS_UP = 2.4;
-const TOSS_AWAY = 2.8;
-const TOSS_LATERAL = 1.4;
+// Discarded sheets are thrown to an explicit landing spot on the mat: a random
+// point on a ring AROUND the pad, so they strew evenly instead of piling up in
+// whichever direction the camera happens to face.
+const FLIGHT_TIME = 0.85; // seconds from toss to touchdown
+const SCATTER_MIN_R = 1.05; // just clear of the 1x1 pad
+const SCATTER_MAX_R = 2.15;
+// Discarded sheets come to rest on the desk mat and stay there.
+const DESK_Y = 0.002; // resting height of the first settled sheet
+const LAYER_Y = 0.0016; // per-sheet lift so stacked sheets never z-fight
+const SETTLE_TIME = 0.28; // seconds to flatten out once it touches down
+const MAX_SETTLED = 14; // oldest sheets are retired beyond this (perf guard)
 
 type State = 'idle' | 'grabbing' | 'relaxing';
 
@@ -32,6 +36,11 @@ interface FlyingPage {
   vel: THREE.Vector3;
   ang: THREE.Vector3;
   life: number;
+  restY: number; // desk height this sheet comes to rest at
+  landed: boolean; // touched the mat; now flattening out
+  settleT: number; // 0..1 flatten progress once landed
+  fromQuat: THREE.Quaternion; // orientation at touchdown
+  toQuat: THREE.Quaternion; // flat-on-the-mat orientation
 }
 
 export interface PeelCallbacks {
@@ -74,13 +83,13 @@ export function createPeel(opts: PeelOptions): PeelController {
 
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
-  const UP = new THREE.Vector3(0, 1, 0);
-  const projTmp = new THREE.Vector3(); // reused to project flying pages to NDC
 
   let state: State = 'idle';
   let grabStartY = 0;
   let active: Page | null = null; // page currently grabbed/relaxing
   let tossSide = 1; // alternates so tossed pages fan out to both sides
+  let settledCount = 0; // how many sheets have been discarded onto the mat
+  let scatterAngle = Math.random() * Math.PI * 2; // walks around the ring
   const flying: FlyingPage[] = [];
 
   function topPage(): Page | null {
@@ -163,41 +172,53 @@ export function createPeel(opts: PeelOptions): PeelController {
     // Stays OPAQUE while flying (correct depth sorting, no glassy overlap). It
     // is removed once it leaves the view (or a short backstop, with a tail fade).
 
-    // Camera-relative basis: fly the page UP the screen, INTO the screen
-    // (receding — so it never grows toward the lens), and fan it out to a side.
-    // Screen-space directions work at any orbit angle, unlike a purely
-    // horizontal "away" which, at a low head-on camera, sent pages straight up
-    // through the sculpture toward the viewer.
-    const fwd = camera.getWorldDirection(new THREE.Vector3()); // into the screen
-    const right = new THREE.Vector3().crossVectors(fwd, UP);
-    if (right.lengthSq() < 1e-4) right.set(1, 0, 0); // guard near top-down
-    right.normalize();
-    const screenUp = new THREE.Vector3().crossVectors(right, fwd).normalize();
-
-    // Alternate sides so pages fan out symmetrically and clear the centre.
+    // Aim at a landing spot on a ring around the pad. Alternate half-planes and
+    // walk the angle by a golden-ratio step so successive sheets land spread
+    // out rather than bunched together.
     tossSide = -tossSide;
-    const lateral = tossSide * (0.7 + Math.random() * TOSS_LATERAL);
+    scatterAngle += 2.399963; // golden angle (rad)
+    const theta = scatterAngle + (tossSide > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.6;
+    const radius = SCATTER_MIN_R + Math.random() * (SCATTER_MAX_R - SCATTER_MIN_R);
 
-    let vel: THREE.Vector3;
-    let ang: THREE.Vector3;
-    if (reducedMotion) {
-      // No bounce: a gentle drift up-screen & back + fade, no spin.
-      vel = new THREE.Vector3()
-        .addScaledVector(screenUp, 0.7)
-        .addScaledVector(fwd, 0.9);
-      ang = new THREE.Vector3(0, 0, 0);
-    } else {
-      vel = new THREE.Vector3()
-        .addScaledVector(screenUp, TOSS_UP)
-        .addScaledVector(fwd, TOSS_AWAY)
-        .addScaledVector(right, lateral);
-      ang = new THREE.Vector3(
-        (Math.random() - 0.5) * 5,
-        (Math.random() - 0.5) * 3,
-        3 + Math.random() * 2.5
-      );
+    // Rest flat on the mat, each discarded sheet a hair above the last.
+    const restY = DESK_Y + (settledCount % MAX_SETTLED) * LAYER_Y;
+    settledCount++;
+
+    // Ballistic solve: constant horizontal velocity to the target, vertical
+    // velocity that lands it there after FLIGHT_TIME under gravity.
+    const start = page.mesh.position;
+    const T = FLIGHT_TIME;
+    const vel = new THREE.Vector3(
+      (Math.cos(theta) * radius - start.x) / T,
+      reducedMotion ? 0 : (restY - start.y + 0.5 * GRAVITY * T * T) / T,
+      (Math.sin(theta) * radius - start.z) / T
+    );
+    const ang = reducedMotion
+      ? new THREE.Vector3(0, 0, 0)
+      : new THREE.Vector3(
+          (Math.random() - 0.5) * 3.5,
+          (Math.random() - 0.5) * 2.5,
+          2.0 + Math.random() * 2.0
+        );
+    flying.push({
+      page,
+      vel,
+      ang,
+      life: 0,
+      restY,
+      landed: false,
+      settleT: 0,
+      fromQuat: new THREE.Quaternion(),
+      toQuat: new THREE.Quaternion().setFromEuler(
+        // Laid flat (local +Z up), spun randomly in-plane so the pile looks strewn.
+        new THREE.Euler(-Math.PI / 2, 0, Math.random() * Math.PI * 2)
+      ),
+    });
+    // Retire the oldest discarded sheets so the mat never grows unbounded.
+    while (flying.length > MAX_SETTLED) {
+      removeFlying(flying[0]);
+      flying.shift();
     }
-    flying.push({ page, vel, ang, life: 0 });
 
     // Promote next page + advance the calendar. The newly exposed sheet becomes
     // the die-cut frame; the tossed one keeps its hole as it flies away.
@@ -230,37 +251,40 @@ export function createPeel(opts: PeelOptions): PeelController {
       }
     }
 
-    // Flying pages: sail up & away, then remove as soon as they leave the view
-    // (keeps the frame clear so the sculpture stays visible while it forms).
+    // Discarded sheets: flutter off the pad, drop onto the desk mat and stay
+    // there — a scatter of die-cut frames around the emerging sculpture.
     for (let i = flying.length - 1; i >= 0; i--) {
       const f = flying[i];
       f.life += dt;
-      if (!reducedMotion) f.vel.y -= GRAVITY * dt;
-      f.page.mesh.position.addScaledVector(f.vel, dt);
-      f.page.mesh.rotation.x += f.ang.x * dt;
-      f.page.mesh.rotation.y += f.ang.y * dt;
-      f.page.mesh.rotation.z += f.ang.z * dt;
+      const mesh = f.page.mesh;
 
-      // Off-screen? (project the page centre to NDC; drop it once it's behind
-      // the camera or well outside the frame.)
-      projTmp.copy(f.page.mesh.position).project(camera);
-      const offScreen =
-        projTmp.z > 1 ||
-        Math.abs(projTmp.x) > 1.3 ||
-        Math.abs(projTmp.y) > 1.3;
+      if (!f.landed) {
+        if (!reducedMotion) f.vel.y -= GRAVITY * dt;
+        // Air drag on the horizontal glide so paper flutters instead of skidding.
+        const drag = 1;
+        f.vel.x *= drag;
+        f.vel.z *= drag;
+        mesh.position.addScaledVector(f.vel, dt);
+        mesh.rotation.x += f.ang.x * dt;
+        mesh.rotation.y += f.ang.y * dt;
+        mesh.rotation.z += f.ang.z * dt;
 
-      // Tail fade only in the last stretch of the backstop life (rare: a page
-      // still on-screen at MAX_LIFE) so it doesn't pop.
-      const tail = f.life - (MAX_LIFE - FADE_TAIL);
-      if (tail > 0) {
-        f.page.material.transparent = true;
-        f.page.material.depthWrite = false;
-        f.page.uniforms.uOpacity.value = clamp01(1 - tail / FADE_TAIL);
-      }
-
-      if (offScreen || f.life >= MAX_LIFE || f.page.mesh.position.y < -3) {
-        removeFlying(f);
-        flying.splice(i, 1);
+        // Touchdown on the mat.
+        if (mesh.position.y <= f.restY && f.vel.y < 0) {
+          mesh.position.y = f.restY;
+          f.landed = true;
+          f.settleT = 0;
+          f.fromQuat.copy(mesh.quaternion);
+        }
+      } else if (f.settleT < 1) {
+        // Flatten out where it landed, easing to lie flat on the desk.
+        f.settleT = Math.min(1, f.settleT + dt / SETTLE_TIME);
+        const e = 1 - Math.pow(1 - f.settleT, 3); // ease-out
+        mesh.quaternion.slerpQuaternions(f.fromQuat, f.toQuat, e);
+        mesh.position.y = f.restY;
+        // A little residual slide as it comes to rest.
+        mesh.position.x += f.vel.x * dt * (1 - e);
+        mesh.position.z += f.vel.z * dt * (1 - e);
       }
     }
   }
