@@ -22,10 +22,14 @@ const FLIGHT_TIME = 0.85; // seconds from toss to touchdown
 // and right and fall away behind it. Deliberately avoids the near side (+Z,
 // toward the camera) where sheets would loom huge and cover the desk props, and
 // keeps the pad itself clear. Angle is radians about world Y; 0 = +X.
+// Four spots on the mat around the pad: mid-left, mid-right, and the two front
+// corners. Angle is radians about world Y — 0 = +X (right), +PI/2 = +Z (toward
+// the camera / front of the mat).
 const SLOTS: ReadonlyArray<{ a: number; r: number }> = [
-  { a: -0.80, r: 0.98 }, // back-right, just past the pad
-  { a: -1.55, r: 1.10 }, // straight back
-  { a: -2.30, r: 0.98 }, // back-left
+  { a: 0.15, r: 1.01 }, // right of the pad
+  { a: Math.PI - 0.10, r: 1.01 }, // left of the pad
+  { a: 0.96, r: 1.06 }, // front-right corner
+  { a: Math.PI - 0.95, r: 1.06 }, // front-left corner
 ];
 // Discarded sheets settle as small notes rather than pad-sized sheets, so they
 // read as set-aside scraps near the mat instead of dominating the frame.
