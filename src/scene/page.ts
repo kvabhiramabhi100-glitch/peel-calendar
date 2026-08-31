@@ -39,6 +39,7 @@ export interface PageUniforms {
   uRelief: { value: number };
   uLevels: { value: number };
   uOpacity: { value: number };
+  uFrame: { value: number }; // 1 = top sheet renders as a die-cut frame
 }
 
 export interface Page {
@@ -62,9 +63,11 @@ export function createPage(opts: CreatePageOptions): Page {
     uRelief: { value: opts.relief ?? DEFAULT_RELIEF },
     uLevels: { value: opts.levels ?? DEFAULT_LEVELS },
     uOpacity: { value: 1 },
+    uFrame: { value: 0 },
   };
 
   const material = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide, // frame sheets show their underside when lifted
     uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     vertexShader,
     fragmentShader,

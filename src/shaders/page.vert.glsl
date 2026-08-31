@@ -12,10 +12,15 @@ uniform float uPageDepth;  // 0..1 this page's slice into the relief
 uniform float uPeel;       // 0..1 curl amount
 uniform float uRelief;     // world height of the full sculpture
 uniform float uLevels;     // terracing quantization (e.g. 22)
+// 1 on the TOP sheet: it is a die-cut FRAME, not sculpture. It stays flat and the
+// fragment shader punches out the sculpture's cross-section, so the form pokes
+// through the paper and the sheet lifts away around it (never dragging it).
+uniform float uFrame;
 
 varying vec2 vUv;
 varying vec3 vNormalW;
-varying float vCarved;
+varying float vCarved;    // displaced carve (0 on a frame sheet)
+varying float vCutout;    // the sculpture cross-section — where a frame is holed
 
 const float HINGE_Y = 0.5;         // local y of the back-edge hinge
 const float PEEL_MAX_ANGLE = 2.7;  // total curl angle (rad) at uPeel = 1
@@ -32,7 +37,11 @@ void main() {
   vUv = uv;
 
   // --- Job 1: carve (flat sheet + relief along local +Z) ---
-  float c = carvedAt(uv);
+  // A frame sheet keeps its true cross-section (for the cut-out) but is NOT
+  // displaced — it stays a flat sheet of paper.
+  float cRaw = carvedAt(uv);
+  vCutout = cRaw;
+  float c = cRaw * (1.0 - uFrame);
   vCarved = c;
 
   // Lighting normal from finite differences of the TERRACED field, so each paper
@@ -42,7 +51,11 @@ void main() {
   float hR = carvedAt(uv + vec2(e, 0.0));
   float hD = carvedAt(uv - vec2(0.0, e));
   float hU = carvedAt(uv + vec2(0.0, e));
-  vec3 nFlat = normalize(vec3(-(hR - hL) / (2.0 * e), -(hU - hD) / (2.0 * e), 1.0));
+  vec3 nFlat = normalize(vec3(
+    -((hR - hL) / (2.0 * e)) * (1.0 - uFrame),
+    -((hU - hD) / (2.0 * e)) * (1.0 - uFrame),
+    1.0
+  ));
 
   // Flat carved point.
   vec3 p = vec3(position.x, position.y, c);

@@ -199,9 +199,13 @@ export function createPeel(opts: PeelOptions): PeelController {
     }
     flying.push({ page, vel, ang, life: 0 });
 
-    // Promote next page + advance the calendar.
+    // Promote next page + advance the calendar. The newly exposed sheet becomes
+    // the die-cut frame; the tossed one keeps its hole as it flies away.
     const next = topPage();
-    if (next) next.uniforms.uPeel.value = 0;
+    if (next) {
+      next.uniforms.uPeel.value = 0;
+      next.uniforms.uFrame.value = 1;
+    }
     syncProxy();
     callbacks.onDateDecrement();
     callbacks.onExpose?.(stack.pages.length);

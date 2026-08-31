@@ -80,5 +80,8 @@ export function createStack(cfg: Partial<StackConfig> = {}): Stack {
     group.add(page.mesh);
   }
 
+  // The visible top sheet is a die-cut frame: the sculpture pokes through it.
+  if (pages.length > 0) pages[0].uniforms.uFrame.value = 1;
+
   return { group, pages, config, topY: (N - 1) * gap, core };
 }
