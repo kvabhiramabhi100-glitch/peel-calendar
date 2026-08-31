@@ -41,22 +41,22 @@ npm run preview   # serve the production build locally
   The grab raycasts an invisible flat proxy plane at the top sheet's rest position
   (never the curled mesh). Tossed pages fly up-and-away **in camera space**, so they
   never sail into the lens at any orbit angle.
-- **The sculpture** (`src/scene/sculpture.ts`) is a GLB clipped by a plane pinned to
-  the current top-sheet height — only the part above the sheet renders, so peeling
-  lowers the "sea level" and the panda emerges top-down out of the pad.
+- **The sculpture is carved out of the pages themselves** — it is *not* a model
+  hidden under the paper. `src/relief/relief.ts` owns a procedural height field
+  (the panda), and every page displaces its own geometry by
+  `carved = max(0, floor(h·L)/L − pageDepth) · relief`. Because the terrace count
+  `L` defaults to `pages − 1`, each contour step lands **exactly on a page plane**,
+  so the form is literally built from stacked paper layers — the laser-cut
+  paper-block look. Peeling lowers the "sea level" and more of the form appears.
 - **Compositing** (`src/main.ts`): the desk photo is the scene background, then
   bloom + film grain + vignette run over photo *and* 3D together so the render
   reads as one photograph rather than a pasted-on layer.
 
 ## Assets
 
-- `public/desk-bg.png` — desk scene backdrop.
-- `public/models/panda.glb` — the revealed sculpture.
+- `public/desk-bg.png` — desk scene backdrop. Swap the file (same path) to
+  re-theme the scene.
 
-Swap either file (keeping the same path) to re-theme the piece. The panda is
-auto-centred and scaled on load; keep its height under the pad thickness
-(`relief` in `src/scene/stack.ts`) so it stays hidden until peeled.
-
-`src/relief/relief.ts` still holds the original **procedural** height-field
-sculpture behind a clearly marked swap seam, if you ever want the carved-relief
-look back instead of a mesh.
+The sculpture needs no asset — it is generated procedurally. `relief.ts` marks a
+**swap seam**: point it at a grayscale height PNG (white = tall, black = flat) to
+carve any other shape while keeping the paper-layer look.

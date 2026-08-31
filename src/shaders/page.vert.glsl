@@ -28,13 +28,6 @@ float carvedAt(vec2 uvp) {
   return max(0.0, h - uPageDepth) * uRelief;
 }
 
-// Smooth carve — same slice, but WITHOUT terracing. Used only for lighting
-// normals so the panda shades as a smooth form instead of faceted steps.
-float smoothCarvedAt(vec2 uvp) {
-  float raw = texture2D(uHeight, uvp).r;
-  return max(0.0, raw - uPageDepth) * uRelief;
-}
-
 void main() {
   vUv = uv;
 
@@ -42,13 +35,13 @@ void main() {
   float c = carvedAt(uv);
   vCarved = c;
 
-  // Lighting normal from finite differences of the SMOOTH field (no terracing),
-  // so shading is smooth even though the geometry steps.
-  float e = 1.5 / 128.0;
-  float hL = smoothCarvedAt(uv - vec2(e, 0.0));
-  float hR = smoothCarvedAt(uv + vec2(e, 0.0));
-  float hD = smoothCarvedAt(uv - vec2(0.0, e));
-  float hU = smoothCarvedAt(uv + vec2(0.0, e));
+  // Lighting normal from finite differences of the TERRACED field, so each paper
+  // layer gets a flat lit top and a shaded riser — the stacked-paper contour look.
+  float e = 1.0 / 128.0;
+  float hL = carvedAt(uv - vec2(e, 0.0));
+  float hR = carvedAt(uv + vec2(e, 0.0));
+  float hD = carvedAt(uv - vec2(0.0, e));
+  float hU = carvedAt(uv + vec2(0.0, e));
   vec3 nFlat = normalize(vec3(-(hR - hL) / (2.0 * e), -(hU - hD) / (2.0 * e), 1.0));
 
   // Flat carved point.

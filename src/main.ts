@@ -12,7 +12,6 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createLighting } from './scene/lighting.ts';
 import { createGround } from './scene/ground.ts';
 import { createStack, DEFAULT_STACK, type Stack } from './scene/stack.ts';
-import { createSculpture, type Sculpture } from './scene/sculpture.ts';
 import { createPeel, type PeelController } from './peel/peel.ts';
 import { createDateState, START_DATE } from './calendar/date.ts';
 import { drawFace, drawBaseFace } from './calendar/face.ts';
@@ -30,7 +29,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap DPR at 2
 renderer.setClearColor(0x000000, 0); // transparent — the desk photo (CSS bg) shows through
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = false; // grounded by a soft shadow decal (scene/ground.ts)
-renderer.localClippingEnabled = true; // used to reveal the panda as pages peel
 renderer.toneMapping = THREE.NeutralToneMapping; // clean, bright product-render look
 renderer.toneMappingExposure = 1.0;
 app.appendChild(renderer.domElement);
@@ -156,7 +154,6 @@ function faceForIndex(i: number): THREE.Texture {
 // --- Stack + peel (rebuildable via the reset button) ----------------------
 let stack: Stack;
 let peel: PeelController;
-let sculpture: Sculpture;
 let peeledOnce = false;
 
 // Auto-reveal is driven from the render loop (not setTimeout) so page tosses and
@@ -168,11 +165,10 @@ const REVEAL_INTERVAL = 0.08; // seconds between page tosses (fast flip-through)
 
 function build(): void {
   dateState.reset();
-  stack = createStack({ face: faceForIndex, flatPages: true });
+  // Pages carve the panda out of the relief height field, so the sculpture is
+  // literally formed by the stacked paper layers (terraced contours).
+  stack = createStack({ face: faceForIndex });
   scene.add(stack.group);
-  // The panda GLB is the sculpture now; it lives inside the pad and is clipped
-  // to the current top-page height so peeling reveals it top-down.
-  sculpture = createSculpture(stack.group);
   readout.update(dateState.get(), stack.pages.length);
 
   peel = createPeel({
@@ -225,7 +221,6 @@ function startReveal(): void {
 function teardown(): void {
   revealActive = false;
   peel.dispose();
-  sculpture.dispose();
   scene.remove(stack.group);
   for (const p of stack.pages) {
     p.material.dispose();
@@ -281,9 +276,6 @@ function tick(): void {
   // Once the pad is peeled flat the core collapses onto the base sheet and
   // z-fights it — hide it so the accent base board reads cleanly.
   stack.core.visible = coreH > stack.config.gap;
-
-  // Reveal the panda down to the current top sheet (hidden while the pad is full).
-  sculpture.setRevealLevel(stack.group.position.y + topY);
 
   controls.update(); // camera orbit + damping (view is user-controlled now)
 

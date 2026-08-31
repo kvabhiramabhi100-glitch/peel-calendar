@@ -38,7 +38,10 @@ export const DEFAULT_STACK: StackConfig = {
   pages: 44,
   relief: 0.36, // thinner pad → reads as a paper pad lying on the desk
   gap: 0,
-  levels: 46, // finer terracing → smoother sculpture silhouette (less stair-stepping)
+  // 0 → auto: one terrace step per sheet (levels = pages - 1). This is what makes
+  // the sculpture read as CUT FROM THE PAPER: each contour of the carve lands
+  // exactly on a page plane, like the laser-cut layers of a real paper block.
+  levels: 0,
 };
 
 export function createStack(cfg: Partial<StackConfig> = {}): Stack {
@@ -46,6 +49,9 @@ export function createStack(cfg: Partial<StackConfig> = {}): Stack {
   const N = config.pages;
   const gap = config.gap > 0 ? config.gap : config.relief / (N - 1);
   config.gap = gap;
+  // One terrace per sheet → carve contours land exactly on the page planes.
+  const levels = config.levels > 0 ? config.levels : N - 1;
+  config.levels = levels;
 
   const group = new THREE.Group();
   const pages: Page[] = [];
