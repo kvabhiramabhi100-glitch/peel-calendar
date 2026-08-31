@@ -23,11 +23,13 @@ const FLIGHT_TIME = 0.85; // seconds from toss to touchdown
 // toward the camera) where sheets would loom huge and cover the desk props, and
 // keeps the pad itself clear. Angle is radians about world Y; 0 = +X.
 const SLOTS: ReadonlyArray<{ a: number; r: number }> = [
-  { a: 0.30, r: 1.12 }, // right of the pad, on the mat
-  { a: Math.PI - 0.30, r: 1.12 }, // left of the pad
-  { a: -0.34, r: 1.34 }, // right, set back a little
-  { a: Math.PI + 0.34, r: 1.34 }, // left, set back a little
+  { a: -0.80, r: 0.98 }, // back-right, just past the pad
+  { a: -1.55, r: 1.10 }, // straight back
+  { a: -2.30, r: 0.98 }, // back-left
 ];
+// Discarded sheets settle as small notes rather than pad-sized sheets, so they
+// read as set-aside scraps near the mat instead of dominating the frame.
+const SETTLED_SCALE = 0.42;
 // Discarded sheets come to rest on the desk mat and stay there.
 const DESK_Y = 0.002; // resting height of the first settled sheet
 const LAYER_Y = 0.0016; // per-sheet lift so stacked sheets never z-fight
@@ -270,9 +272,15 @@ export function createPeel(opts: PeelOptions): PeelController {
         mesh.rotation.y += f.ang.y * dt;
         mesh.rotation.z += f.ang.z * dt;
 
+        // Shrink smoothly over the flight so the sheet settles as a small note
+        // (a hard swap at touchdown would pop).
+        const k = clamp01(f.life / FLIGHT_TIME);
+        mesh.scale.setScalar(1 + (SETTLED_SCALE - 1) * k);
+
         // Touchdown on the mat.
         if (mesh.position.y <= f.restY && f.vel.y < 0) {
           mesh.position.y = f.restY;
+          mesh.scale.setScalar(SETTLED_SCALE);
           f.landed = true;
           f.settleT = 0;
           f.fromQuat.copy(mesh.quaternion);
