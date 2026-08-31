@@ -13,11 +13,12 @@ uniform sampler2D uFace;   // printed calendar face (moss + type)
 uniform sampler2D uHeight; // R = relief height, G = black-patch mask
 uniform float uOpacity;
 uniform float uFrame;      // 1 = top sheet: die-cut frame, hole punched below
+uniform float uPageDepth;  // this sheet's slice into the relief (for the cut)
+uniform float uLevels;     // terrace quantization (for the cut)
 
 varying vec2 vUv;
 varying vec3 vNormalW;
 varying float vCarved;
-varying float vCutout;
 
 const vec3 EDGE = vec3(0.84, 0.83, 0.8);  // warm light-grey paper edges / walls
 const vec3 FUR = vec3(0.86, 0.85, 0.82);  // warm panda white clay (dimmer, sits into scene)
@@ -26,7 +27,13 @@ const vec3 PATCH = vec3(0.1, 0.11, 0.13); // panda dark markings
 void main() {
   // Die-cut: on the top sheet, punch out the sculpture's cross-section so the
   // form pokes through the paper and the sheet peels away as a frame around it.
-  if (uFrame > 0.5 && vCutout > 0.0005) discard;
+  // Sampled PER-PIXEL (not an interpolated per-vertex varying) so the cut edge
+  // resolves at texture resolution instead of the 128x128 vertex grid.
+  if (uFrame > 0.5) {
+    float rawH = texture2D(uHeight, vUv).r;
+    float terraced = floor(rawH * uLevels) / uLevels;
+    if (terraced - uPageDepth > 0.0) discard;
+  }
 
   vec3 N = normalize(vNormalW);
 

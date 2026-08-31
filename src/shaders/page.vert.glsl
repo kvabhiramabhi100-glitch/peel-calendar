@@ -20,7 +20,7 @@ uniform float uFrame;
 varying vec2 vUv;
 varying vec3 vNormalW;
 varying float vCarved;    // displaced carve (0 on a frame sheet)
-varying float vCutout;    // the sculpture cross-section — where a frame is holed
+
 
 const float HINGE_Y = 0.5;         // local y of the back-edge hinge
 const float PEEL_MAX_ANGLE = 2.7;  // total curl angle (rad) at uPeel = 1
@@ -40,7 +40,7 @@ void main() {
   // A frame sheet keeps its true cross-section (for the cut-out) but is NOT
   // displaced — it stays a flat sheet of paper.
   float cRaw = carvedAt(uv);
-  vCutout = cRaw;
+  // (cut-out is evaluated per-pixel in the fragment shader)
   float c = cRaw * (1.0 - uFrame);
   vCarved = c;
 

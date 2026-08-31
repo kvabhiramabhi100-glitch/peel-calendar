@@ -204,7 +204,8 @@ export function createPeel(opts: PeelOptions): PeelController {
     const next = topPage();
     if (next) {
       next.uniforms.uPeel.value = 0;
-      next.uniforms.uFrame.value = 1;
+      // The final sheet is the base board holding the sculpture — never holed.
+      next.uniforms.uFrame.value = stack.pages.length > 1 ? 1 : 0;
     }
     syncProxy();
     callbacks.onDateDecrement();
