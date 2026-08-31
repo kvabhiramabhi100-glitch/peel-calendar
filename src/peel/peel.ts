@@ -17,17 +17,22 @@ const PEEL_RANGE_PX = 300; // pointer travel (up) for a full peel
 const TOSS_THRESHOLD = 0.55;
 const RELAX_SPEED = 9; // uPeel → 0 lerp rate when relaxing
 const GRAVITY = 5.5; // gentle arc so pages sail off before falling back
-// Discarded sheets are thrown to an explicit landing spot on the mat: a random
-// point on a ring AROUND the pad, so they strew evenly instead of piling up in
-// whichever direction the camera happens to face.
 const FLIGHT_TIME = 0.85; // seconds from toss to touchdown
-const SCATTER_MIN_R = 1.05; // just clear of the 1x1 pad
-const SCATTER_MAX_R = 2.15;
+// Discarded sheets land on a small set of CURATED spots that flank the pad left
+// and right and fall away behind it. Deliberately avoids the near side (+Z,
+// toward the camera) where sheets would loom huge and cover the desk props, and
+// keeps the pad itself clear. Angle is radians about world Y; 0 = +X.
+const SLOTS: ReadonlyArray<{ a: number; r: number }> = [
+  { a: 0.30, r: 1.12 }, // right of the pad, on the mat
+  { a: Math.PI - 0.30, r: 1.12 }, // left of the pad
+  { a: -0.34, r: 1.34 }, // right, set back a little
+  { a: Math.PI + 0.34, r: 1.34 }, // left, set back a little
+];
 // Discarded sheets come to rest on the desk mat and stay there.
 const DESK_Y = 0.002; // resting height of the first settled sheet
 const LAYER_Y = 0.0016; // per-sheet lift so stacked sheets never z-fight
 const SETTLE_TIME = 0.28; // seconds to flatten out once it touches down
-const MAX_SETTLED = 14; // oldest sheets are retired beyond this (perf guard)
+const MAX_SETTLED = SLOTS.length; // one sheet per slot; the oldest is retired
 
 type State = 'idle' | 'grabbing' | 'relaxing';
 
@@ -87,9 +92,7 @@ export function createPeel(opts: PeelOptions): PeelController {
   let state: State = 'idle';
   let grabStartY = 0;
   let active: Page | null = null; // page currently grabbed/relaxing
-  let tossSide = 1; // alternates so tossed pages fan out to both sides
   let settledCount = 0; // how many sheets have been discarded onto the mat
-  let scatterAngle = Math.random() * Math.PI * 2; // walks around the ring
   const flying: FlyingPage[] = [];
 
   function topPage(): Page | null {
@@ -172,13 +175,11 @@ export function createPeel(opts: PeelOptions): PeelController {
     // Stays OPAQUE while flying (correct depth sorting, no glassy overlap). It
     // is removed once it leaves the view (or a short backstop, with a tail fade).
 
-    // Aim at a landing spot on a ring around the pad. Alternate half-planes and
-    // walk the angle by a golden-ratio step so successive sheets land spread
-    // out rather than bunched together.
-    tossSide = -tossSide;
-    scatterAngle += 2.399963; // golden angle (rad)
-    const theta = scatterAngle + (tossSide > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.6;
-    const radius = SCATTER_MIN_R + Math.random() * (SCATTER_MAX_R - SCATTER_MIN_R);
+    // Take the next curated slot (they alternate left/right by construction), with
+    // a touch of jitter so the arrangement reads hand-strewn, not mechanical.
+    const slot = SLOTS[settledCount % SLOTS.length];
+    const theta = slot.a + (Math.random() - 0.5) * 0.22;
+    const radius = slot.r + (Math.random() - 0.5) * 0.22;
 
     // Rest flat on the mat, each discarded sheet a hair above the last.
     const restY = DESK_Y + (settledCount % MAX_SETTLED) * LAYER_Y;
