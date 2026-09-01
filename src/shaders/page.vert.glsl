@@ -19,6 +19,7 @@ uniform float uFrame;
 
 varying vec2 vUv;
 varying vec3 vNormalW;
+varying vec3 vWorldPos;   // for view-dependent sheen
 varying float vCarved;    // displaced carve (0 on a frame sheet)
 
 
@@ -85,5 +86,6 @@ void main() {
   }
 
   vNormalW = normalize(mat3(modelMatrix) * n);
+  vWorldPos = (modelMatrix * vec4(p, 1.0)).xyz;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
 }

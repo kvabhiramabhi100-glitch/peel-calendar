@@ -85,6 +85,7 @@ export function drawBaseFace(): THREE.CanvasTexture {
 
   ctx.fillStyle = BASE_ACCENT;
   ctx.fillRect(0, 0, S, S);
+  paperMottle(ctx, S);
 
   // Gentle radial shading: slightly brighter centre, softly deeper edges.
   const g = ctx.createRadialGradient(S * 0.5, S * 0.42, S * 0.05, S * 0.5, S * 0.5, S * 0.75);
@@ -101,15 +102,34 @@ export function drawBaseFace(): THREE.CanvasTexture {
   return tex;
 }
 
+// Soft large-scale blotches — the uneven tone real uncoated stock has. Very low
+// contrast; the fine fibre grain is added per-pixel in the fragment shader.
+function paperMottle(ctx: CanvasRenderingContext2D, S: number): void {
+  ctx.save();
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const r = S * (0.04 + Math.random() * 0.16);
+    const dark = Math.random() < 0.5;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, dark ? 'rgba(120,112,96,0.035)' : 'rgba(255,255,255,0.05)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  ctx.restore();
+}
+
 export function drawFace(date: Date, opts: FaceOptions = {}): THREE.CanvasTexture {
   const S = 512;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = S;
   const ctx = canvas.getContext('2d')!;
 
-  // Clean paper sheet.
+  // Paper sheet: flat stock plus a faint mottle so the print isn't dead-even.
   ctx.fillStyle = SHEET;
   ctx.fillRect(0, 0, S, S);
+  paperMottle(ctx, S);
 
   // Faint panda in the upper-middle (exposed pages).
   if (opts.showSilhouette) {
