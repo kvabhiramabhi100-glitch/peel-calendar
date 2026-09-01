@@ -5,6 +5,8 @@ export interface Chrome {
   hideHint: () => void;
   onReset: (cb: () => void) => void;
   onReveal: (cb: () => void) => void;
+  /** Fires with the new muted state whenever the sound toggle is clicked. */
+  onMuteToggle: (cb: (muted: boolean) => void) => void;
 }
 
 export function createChrome(): Chrome {
@@ -35,6 +37,12 @@ export function createChrome(): Chrome {
     .chrome-btn:active { transform: translateY(1px); }
     .reset-btn { background: #e7e8ea; color: #33363b; }
     .reset-btn:hover { background: #dcdde0; }
+    .mute-btn {
+      background: #e7e8ea; color: #33363b;
+      padding: 9px 12px; min-width: 40px;
+    }
+    .mute-btn:hover { background: #dcdde0; }
+    .mute-btn.is-muted { color: #9a9da2; }
     .reveal-btn { background: #ff5733; color: #ffffff; }
     .reveal-btn:hover { background: #f2481f; }
     .reveal-btn:disabled { opacity: 0.5; cursor: default; }
@@ -61,11 +69,31 @@ export function createChrome(): Chrome {
   reset.textContent = '↺ Restack';
   row.appendChild(reset);
 
+  const mute = document.createElement('button');
+  mute.className = 'chrome-btn mute-btn';
+  mute.type = 'button';
+  mute.textContent = '🔊';
+  mute.setAttribute('aria-label', 'Mute sound');
+  mute.title = 'Mute sound';
+  row.appendChild(mute);
+
   document.body.appendChild(row);
+
+  let muted = false;
 
   return {
     hideHint: () => hint.classList.add('hidden'),
     onReset: (cb) => reset.addEventListener('click', cb),
     onReveal: (cb) => reveal.addEventListener('click', cb),
+    onMuteToggle: (cb) =>
+      mute.addEventListener('click', () => {
+        muted = !muted;
+        mute.textContent = muted ? '🔇' : '🔊';
+        mute.classList.toggle('is-muted', muted);
+        const label = muted ? 'Unmute sound' : 'Mute sound';
+        mute.setAttribute('aria-label', label);
+        mute.title = label;
+        cb(muted);
+      }),
   };
 }

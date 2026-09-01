@@ -17,6 +17,7 @@ import { createDateState, START_DATE } from './calendar/date.ts';
 import { drawFace, drawBaseFace } from './calendar/face.ts';
 import { createReadout } from './calendar/readout.ts';
 import { createChrome } from './ui.ts';
+import { createSfx } from './audio.ts';
 
 const prefersReducedMotion = window.matchMedia(
   '(prefers-reduced-motion: reduce)'
@@ -141,6 +142,12 @@ composer.addPass(new OutputPass());
 const dateState = createDateState();
 const readout = createReadout();
 const chrome = createChrome();
+const sfx = createSfx();
+chrome.onMuteToggle((muted) => sfx.setMuted(muted));
+// Browsers hold audio until a gesture — unlock on the first interaction.
+renderer.domElement.addEventListener('pointerdown', () => sfx.resume(), {
+  once: true,
+});
 
 // Face for stack page i: START_DATE minus i days, flat print (no silhouette).
 // The LAST page is the pad's base board — a bold accent the sculpture sits on.
@@ -203,6 +210,8 @@ function build(): void {
         }
         readout.update(dateState.get(), stack.pages.length);
       },
+      onTear: (strength) => sfx.tear(strength),
+      onLand: () => sfx.land(),
     },
   });
 }
@@ -234,7 +243,10 @@ chrome.onReset(() => {
   teardown();
   build();
 });
-chrome.onReveal(startReveal);
+chrome.onReveal(() => {
+  sfx.resume(); // the click is a gesture — unlock audio if it hasn't been yet
+  startReveal();
+});
 
 // --- Resize ---------------------------------------------------------------
 window.addEventListener('resize', () => {
@@ -260,6 +272,7 @@ function tick(): void {
       revealAcc -= REVEAL_INTERVAL;
       if (!peel.peelTop()) {
         revealActive = false;
+        sfx.chime(); // the pad is peeled out — the sculpture has landed
         break;
       }
     }

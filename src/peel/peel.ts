@@ -59,6 +59,10 @@ export interface PeelCallbacks {
   onDateDecrement: () => void;
   onFirstPeel?: () => void;
   onExpose?: (remaining: number) => void;
+  /** A sheet tears free of the pad. `strength` 0..1 = how hard it was pulled. */
+  onTear?: (strength: number) => void;
+  /** A discarded sheet touches down on the mat. */
+  onLand?: () => void;
 }
 
 export interface PeelOptions {
@@ -176,6 +180,9 @@ export function createPeel(opts: PeelOptions): PeelController {
 
   // --- Toss: detach the top page and fling it up & away from the camera ----
   function toss(page: Page): void {
+    // The sheet lets go of the pad — how far it was pulled sets how hard it rips.
+    callbacks.onTear?.(clamp01(page.uniforms.uPeel.value));
+
     // Remove from the stack; promote the next page.
     stack.pages.shift();
     scene.attach(page.mesh); // reparent to scene, preserving world transform
@@ -293,6 +300,7 @@ export function createPeel(opts: PeelOptions): PeelController {
           f.landed = true;
           f.settleT = 0;
           f.fromQuat.copy(mesh.quaternion);
+          callbacks.onLand?.();
         }
       } else if (f.settleT < 1) {
         // Flatten out where it landed, easing to lie flat on the desk.
