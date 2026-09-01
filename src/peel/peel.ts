@@ -17,19 +17,19 @@ const PEEL_RANGE_PX = 300; // pointer travel (up) for a full peel
 const TOSS_THRESHOLD = 0.55;
 const RELAX_SPEED = 9; // uPeel → 0 lerp rate when relaxing
 const GRAVITY = 5.5; // gentle arc so pages sail off before falling back
-const FLIGHT_TIME = 0.85; // seconds from toss to touchdown
-// Discarded sheets land on a small set of CURATED spots that flank the pad left
-// and right and fall away behind it. Deliberately avoids the near side (+Z,
-// toward the camera) where sheets would loom huge and cover the desk props, and
-// keeps the pad itself clear. Angle is radians about world Y; 0 = +X.
-// Four spots on the mat around the pad: mid-left, mid-right, and the two front
-// corners. Angle is radians about world Y — 0 = +X (right), +PI/2 = +Z (toward
-// the camera / front of the mat).
+// Sheets are flicked sideways off the pad and simply FALL to the mat — no
+// upward hop, so a sheet can never rise above the pad and sail across the
+// sculpture. Flight time is derived from the drop rather than fixed.
+//
+// Landing spots sit on the mat around the pad. They are deliberately kept to
+// the sides and the FAR half (negative Z): the camera looks from +Z, so a sheet
+// travelling toward +Z crosses between the lens and the sculpture and hides the
+// reveal. Angle is radians about world Y — 0 = +X (right), +PI/2 = +Z (camera).
 const SLOTS: ReadonlyArray<{ a: number; r: number }> = [
-  { a: 0.15, r: 1.01 }, // right of the pad
-  { a: Math.PI - 0.10, r: 1.01 }, // left of the pad
-  { a: 0.96, r: 1.06 }, // front-right corner
-  { a: Math.PI - 0.95, r: 1.06 }, // front-left corner
+  { a: 0.02, r: 1.06 }, // straight out to the right
+  { a: Math.PI - 0.02, r: 1.06 }, // straight out to the left
+  { a: -0.62, r: 1.24 }, // right, falling away from the camera
+  { a: Math.PI + 0.62, r: 1.24 }, // left, falling away from the camera
 ];
 // Discarded sheets settle as small notes rather than pad-sized sheets, so they
 // read as set-aside scraps near the mat instead of dominating the frame.
@@ -47,6 +47,7 @@ interface FlyingPage {
   vel: THREE.Vector3;
   ang: THREE.Vector3;
   life: number;
+  fallTime: number; // seconds this sheet takes to reach the mat
   restY: number; // desk height this sheet comes to rest at
   landed: boolean; // touched the mat; now flattening out
   settleT: number; // 0..1 flatten progress once landed
@@ -191,27 +192,31 @@ export function createPeel(opts: PeelOptions): PeelController {
     const restY = DESK_Y + (settledCount % MAX_SETTLED) * LAYER_Y;
     settledCount++;
 
-    // Ballistic solve: constant horizontal velocity to the target, vertical
-    // velocity that lands it there after FLIGHT_TIME under gravity.
+    // Pure drop: zero launch velocity upward, so the fall time follows straight
+    // from the height, and horizontal speed is whatever reaches the slot in that
+    // time. The sheet only ever descends — it cannot loft across the lens.
     const start = page.mesh.position;
-    const T = FLIGHT_TIME;
+    const drop = Math.max(start.y - restY, 0.001);
+    const T = Math.sqrt((2 * drop) / GRAVITY);
     const vel = new THREE.Vector3(
       (Math.cos(theta) * radius - start.x) / T,
-      reducedMotion ? 0 : (restY - start.y + 0.5 * GRAVITY * T * T) / T,
+      0,
       (Math.sin(theta) * radius - start.z) / T
     );
+    // Gentler tumble — a wild spin flails the sheet through the shot.
     const ang = reducedMotion
       ? new THREE.Vector3(0, 0, 0)
       : new THREE.Vector3(
-          (Math.random() - 0.5) * 3.5,
-          (Math.random() - 0.5) * 2.5,
-          2.0 + Math.random() * 2.0
+          (Math.random() - 0.5) * 1.8,
+          (Math.random() - 0.5) * 1.4,
+          1.2 + Math.random() * 1.2
         );
     flying.push({
       page,
       vel,
       ang,
       life: 0,
+      fallTime: T,
       restY,
       landed: false,
       settleT: 0,
@@ -278,7 +283,7 @@ export function createPeel(opts: PeelOptions): PeelController {
 
         // Shrink smoothly over the flight so the sheet settles as a small note
         // (a hard swap at touchdown would pop).
-        const k = clamp01(f.life / FLIGHT_TIME);
+        const k = clamp01(f.life / f.fallTime);
         mesh.scale.setScalar(1 + (SETTLED_SCALE - 1) * k);
 
         // Touchdown on the mat.
