@@ -13,7 +13,7 @@ import { createLighting } from './scene/lighting.ts';
 import { createGround } from './scene/ground.ts';
 import { createStack, DEFAULT_STACK, type Stack } from './scene/stack.ts';
 import { createPeel, type PeelController } from './peel/peel.ts';
-import { createDateState, START_DATE } from './calendar/date.ts';
+import { createDateState, startDate } from './calendar/date.ts';
 import { drawFace, drawBaseFace } from './calendar/face.ts';
 import { createReadout } from './calendar/readout.ts';
 import { createChrome } from './ui.ts';
@@ -139,7 +139,10 @@ composer.addPass(grainPass);
 composer.addPass(new OutputPass());
 
 // --- Date state + overlays ------------------------------------------------
-const dateState = createDateState();
+// Captured once so the printed sheets and the readout share the same "today"
+// even if the app is left open across midnight.
+const today = startDate();
+const dateState = createDateState(today);
 const readout = createReadout();
 const chrome = createChrome();
 const sfx = createSfx();
@@ -149,12 +152,13 @@ renderer.domElement.addEventListener('pointerdown', () => sfx.resume(), {
   once: true,
 });
 
-// Face for stack page i: START_DATE minus i days, flat print (no silhouette).
-// The LAST page is the pad's base board — a bold accent the sculpture sits on.
+// Face for stack page i: today PLUS i days, so the sheets below the top one are
+// the days still to come — tearing the top off exposes tomorrow, like a real
+// peel-off calendar. The LAST page is the pad's accent base board.
 function faceForIndex(i: number): THREE.Texture {
   if (i >= DEFAULT_STACK.pages - 1) return drawBaseFace();
-  const d = new Date(START_DATE.getTime());
-  d.setDate(d.getDate() - i);
+  const d = new Date(today.getTime());
+  d.setDate(d.getDate() + i);
   return drawFace(d, { showSilhouette: false });
 }
 
@@ -191,8 +195,8 @@ function build(): void {
       controls.enabled = true;
     },
     callbacks: {
-      onDateDecrement: () => {
-        dateState.decrement();
+      onDateAdvance: () => {
+        dateState.advance();
         readout.update(dateState.get(), stack.pages.length);
         if (!peeledOnce) {
           peeledOnce = true;
@@ -249,14 +253,23 @@ chrome.onReveal(() => {
 });
 
 // --- Resize ---------------------------------------------------------------
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+function resize(): void {
+  // Guard against a zero-sized viewport (loading in a hidden tab or a
+  // display:none container). A 0/0 aspect poisons the projection matrix with
+  // NaN and the scene stays blank for good, even once it becomes visible.
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
-  bloom.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  bloom.setSize(w, h);
   applyBgCover();
-});
+}
+window.addEventListener('resize', resize);
+// A window `resize` doesn't fire when only the CONTAINER changes size (revealed
+// pane, split view, CSS layout shift), so watch the element itself too.
+new ResizeObserver(resize).observe(app);
 
 // --- Render loop ----------------------------------------------------------
 const clock = new THREE.Clock();

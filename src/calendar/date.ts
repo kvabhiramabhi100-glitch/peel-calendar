@@ -1,23 +1,35 @@
-// date.ts — owns the calendar's date state: the current day, decrement-by-one
+// date.ts — owns the calendar's date state: the current day, advance-by-one
 // (each peel), reset, and week-number derivation. The styled readout + printed
-// face live in face.ts / the HTML overlay (Step 7); this is just the state.
+// face live in face.ts / the HTML overlay; this is just the state.
 
-// Flip this one line to start from today instead of a fixed date.
-export const START_DATE = new Date(2025, 7, 31); // 2025-08-31 (month is 0-indexed)
+/**
+ * The date shown on the top sheet. Defaults to TODAY, so the calendar is always
+ * correct without anyone editing the source. To pin a fixed date instead (handy
+ * for screenshots), replace the body with e.g. `new Date(2025, 7, 31)` —
+ * month is 0-indexed.
+ */
+export function startDate(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()); // midnight
+}
 
 export interface DateState {
   get(): Date;
-  decrement(): Date; // step back one day, returns the new date
+  /**
+   * Tear off the current sheet, revealing the next day. A real peel-off
+   * calendar counts FORWARD: you remove today to expose tomorrow.
+   */
+  advance(): Date;
   reset(): Date;
 }
 
-export function createDateState(start: Date = START_DATE): DateState {
+export function createDateState(start: Date = startDate()): DateState {
   let current = new Date(start.getTime());
   return {
     get: () => new Date(current.getTime()),
-    decrement: () => {
+    advance: () => {
       current = new Date(current.getTime());
-      current.setDate(current.getDate() - 1);
+      current.setDate(current.getDate() + 1);
       return new Date(current.getTime());
     },
     reset: () => {

@@ -7,7 +7,7 @@
 // mesh — that's unreliable to raycast). Grabbing maps vertical pointer travel to
 // uPeel (0..1) on the top page only. Release < THRESHOLD relaxes back to flat;
 // release ≥ THRESHOLD tosses the page off with physics, promotes the next page,
-// and decrements the date.
+// and advances the date to the next day.
 
 import * as THREE from 'three';
 import type { Stack } from '../scene/stack.ts';
@@ -56,7 +56,7 @@ interface FlyingPage {
 }
 
 export interface PeelCallbacks {
-  onDateDecrement: () => void;
+  onDateAdvance: () => void;
   onFirstPeel?: () => void;
   onExpose?: (remaining: number) => void;
   /** A sheet tears free of the pad. `strength` 0..1 = how hard it was pulled. */
@@ -248,7 +248,7 @@ export function createPeel(opts: PeelOptions): PeelController {
       next.uniforms.uFrame.value = stack.pages.length > 1 ? 1 : 0;
     }
     syncProxy();
-    callbacks.onDateDecrement();
+    callbacks.onDateAdvance();
     callbacks.onExpose?.(stack.pages.length);
   }
 
